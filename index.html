@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Links de Visualização Cloudinary</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        input[type="file"] {
+            display: block;
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #resultado {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+        #link-gerado {
+            font-weight: bold;
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📤 Upload de Arquivo e Geração de Link</h1>
+        <input type="file" id="arquivo" accept="*/*">
+        <button id="btn-upload" onclick="fazerUpload()">Gerar Link de Visualização</button>
+
+        <div id="resultado" style="display: none;">
+            <p>Status: <span id="status-upload"></span></p>
+            <p id="link-container" style="display: none;">Link Gerado: <span id="link-gerado"></span></p>
+        </div>
+    </div>
+
+    <script>
+        // Configurações da API Cloudinary
+        const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/drsyomd2a/auto/upload";
+        // Sua API Key. Note que, com o Upload Preset, ela é usada apenas para identificar a conta, mas o PRESET é a chave principal.
+        const CLOUDINARY_API_KEY = "596618796528727"; 
+        
+        // 🚨 VOCÊ DEVE MUDAR ISTO: Crie um Upload Preset NÃO ASSINADO no seu painel.
+        const CLOUDINARY_UPLOAD_PRESET = "testes"; 
+
+        const inputArquivo = document.getElementById('arquivo');
+        const btnUpload = document.getElementById('btn-upload');
+        const resultadoDiv = document.getElementById('resultado');
+        const statusSpan = document.getElementById('status-upload');
+        const linkContainer = document.getElementById('link-container');
+        const linkGeradoSpan = document.getElementById('link-gerado');
+
+        async function fazerUpload() {
+            const arquivo = inputArquivo.files[0];
+
+            if (!arquivo) {
+                alert("Por favor, selecione um arquivo primeiro.");
+                return;
+            }
+
+            btnUpload.disabled = true;
+            statusSpan.textContent = "Iniciando upload...";
+            linkContainer.style.display = 'none';
+            resultadoDiv.style.display = 'block';
+
+            // Cria um objeto FormData para a requisição POST
+            const formData = new FormData();
+            formData.append('file', arquivo); // O arquivo
+            formData.append('api_key', CLOUDINARY_API_KEY); // Sua API Key
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); // O Upload Preset
+
+            try {
+                statusSpan.textContent = "Enviando arquivo...";
+                
+                const resposta = await fetch(CLOUDINARY_UPLOAD_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!resposta.ok) {
+                    const erroData = await resposta.json();
+                    throw new Error(`Erro de resposta da API: ${resposta.status} - ${erroData.error ? erroData.error.message : 'Erro desconhecido'}`);
+                }
+
+                const data = await resposta.json();
+                
+                // O link de visualização (URL segura) é retornado na resposta
+                const urlVisualizacao = data.secure_url; 
+
+                statusSpan.textContent = "Upload concluído com sucesso!";
+                linkGeradoSpan.textContent = urlVisualizacao;
+                linkContainer.style.display = 'block';
+
+            } catch (erro) {
+                statusSpan.textContent = `Falha no upload: ${erro.message}. Verifique o console para mais detalhes.`;
+                console.error("Erro de Upload:", erro);
+                linkContainer.style.display = 'none';
+            } finally {
+                btnUpload.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
