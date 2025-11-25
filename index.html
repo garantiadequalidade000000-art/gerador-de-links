@@ -54,6 +54,25 @@
             color: #666;
             margin-top: 10px;
         }
+
+        /* Estilos da Barra de Progresso */
+        #barra-progresso-container {
+            width: 100%;
+            background-color: #f3f3f3;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+            display: none; /* Escondida por padrão */
+        }
+        #barra-progresso {
+            width: 0%;
+            height: 25px;
+            background-color: #28a745;
+            text-align: center;
+            line-height: 25px;
+            color: white;
+            transition: width 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -64,6 +83,9 @@
 
         <div id="resultado" style="display: none;">
             <p>Status: <span id="status-upload"></span></p>
+            <div id="barra-progresso-container">
+                <div id="barra-progresso">0%</div>
+            </div>
             <p id="link-container" style="display: none;">Link Gerado: <span id="link-gerado"></span></p>
         </div>
         <p class="aviso">Nota: O upload pode levar alguns segundos adicionais devido ao uso do Proxy de redirecionamento.</p>
@@ -86,8 +108,28 @@
         const statusSpan = document.getElementById('status-upload');
         const linkContainer = document.getElementById('link-container');
         const linkGeradoSpan = document.getElementById('link-gerado');
+        
+        // Novos elementos da barra de progresso
+        const progressoContainer = document.getElementById('barra-progresso-container');
+        const barraProgresso = document.getElementById('barra-progresso');
 
-        async function fazerUpload() {
+
+        function resetarStatus() {
+            statusSpan.textContent = "";
+            linkContainer.style.display = 'none';
+            barraProgresso.style.width = '0%';
+            barraProgresso.textContent = '0%';
+            progressoContainer.style.display = 'none';
+        }
+
+        function atualizarProgresso(porcentagem) {
+            const percArredondada = Math.round(porcentagem);
+            barraProgresso.style.width = percArredondada + '%';
+            barraProgresso.textContent = percArredondada + '%';
+        }
+
+
+        function fazerUpload() {
             const arquivo = inputArquivo.files[0];
 
             if (!arquivo) {
@@ -95,10 +137,13 @@
                 return;
             }
 
+            // 1. Configuração inicial do UI
             btnUpload.disabled = true;
-            statusSpan.textContent = "Conectando ao Proxy e enviando...";
-            linkContainer.style.display = 'none';
+            resetarStatus(); // Garante que tudo está limpo
             resultadoDiv.style.display = 'block';
+            progressoContainer.style.display = 'block';
+            statusSpan.textContent = "Preparando o envio...";
+
 
             try {
                 const formData = new FormData();
@@ -107,36 +152,69 @@
                 // Montamos a URL final: Proxy + URL codificada do Pixeldrain
                 const urlFinal = PROXY_URL + encodeURIComponent(TARGET_URL);
 
-                const resposta = await fetch(urlFinal, {
-                    method: 'POST',
-                    headers: {
-                        // O Proxy repassa este header para o Pixeldrain
-                        "Authorization": "Basic " + btoa(":" + PIXELDRAIN_API_KEY)
-                    },
-                    body: formData
+                // **Substituição de 'fetch' por 'XMLHttpRequest' para rastrear o progresso**
+                const xhr = new XMLHttpRequest();
+
+                // Evento de progresso do upload
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+                        statusSpan.textContent = `Enviando arquivo: ${Math.round(percentComplete)}%`;
+                        atualizarProgresso(percentComplete);
+                    }
                 });
 
-                if (resposta.status >= 400) {
-                    const erroTexto = await resposta.text(); // Usamos text() pois proxies as vezes retornam HTML de erro
-                    throw new Error(`Erro na API (${resposta.status}): ${erroTexto.substring(0, 100)}...`);
-                }
+                // Evento de conclusão/erro
+                xhr.addEventListener('load', () => {
+                    // Após o upload, atualizamos o status e o progresso para 100%
+                    atualizarProgresso(100);
+                    statusSpan.textContent = "Upload concluído. Processando e gerando link...";
+                    
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
 
-                const data = await resposta.json();
+                            if (data.success) {
+                                // O link só é gerado após o retorno de sucesso da API
+                                const urlVisualizacao = `https://pixeldrain.com/u/${data.id}`;
+                                statusSpan.textContent = "Upload e processamento realizados com sucesso!";
+                                linkGeradoSpan.textContent = urlVisualizacao;
+                                linkContainer.style.display = 'block';
+                            } else {
+                                throw new Error("A API retornou sucesso: false");
+                            }
+                        } catch (e) {
+                            statusSpan.textContent = `Falha ao processar resposta: ${e.message}`;
+                            console.error("Detalhe do Erro:", e);
+                            linkContainer.style.display = 'none';
+                        }
+                    } else {
+                        statusSpan.textContent = `Falha na API (${xhr.status}): ${xhr.responseText.substring(0, 100)}...`;
+                        linkContainer.style.display = 'none';
+                    }
+                    
+                    btnUpload.disabled = false;
+                });
 
-                if (data.success) {
-                    const urlVisualizacao = `https://pixeldrain.com/u/${data.id}`;
-                    statusSpan.textContent = "Upload realizado com sucesso!";
-                    linkGeradoSpan.textContent = urlVisualizacao;
-                    linkContainer.style.display = 'block';
-                } else {
-                    throw new Error("A API retornou sucesso: false");
-                }
+                xhr.addEventListener('error', () => {
+                    statusSpan.textContent = `Falha de rede ou CORS: Verifique a URL do Proxy.`;
+                    console.error("Erro XHR:", xhr.statusText);
+                    linkContainer.style.display = 'none';
+                    btnUpload.disabled = false;
+                });
+
+                // Configuração da requisição
+                xhr.open('POST', urlFinal);
+                xhr.setRequestHeader("Authorization", "Basic " + btoa(":" + PIXELDRAIN_API_KEY));
+                
+                // Envio
+                xhr.send(formData);
 
             } catch (erro) {
+                // Erro na fase de preparação (ex: erro de FormData)
                 statusSpan.textContent = `Falha: ${erro.message}`;
                 console.error("Detalhe do Erro:", erro);
                 linkContainer.style.display = 'none';
-            } finally {
                 btnUpload.disabled = false;
             }
         }
