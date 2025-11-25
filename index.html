@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerador de Links de Visualização Cloudinary</title>
+    <title>Gerador de Links Pixeldrain</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -49,11 +49,16 @@
             font-weight: bold;
             color: #28a745;
         }
+        .aviso {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📤 Upload de Arquivo e Geração de Link</h1>
+        <h1>📤 Upload Pixeldrain</h1>
         <input type="file" id="arquivo" accept="*/*">
         <button id="btn-upload" onclick="fazerUpload()">Gerar Link de Visualização</button>
 
@@ -61,16 +66,19 @@
             <p>Status: <span id="status-upload"></span></p>
             <p id="link-container" style="display: none;">Link Gerado: <span id="link-gerado"></span></p>
         </div>
+        <p class="aviso">Nota: O upload pode levar alguns segundos adicionais devido ao uso do Proxy de redirecionamento.</p>
     </div>
 
     <script>
-        // Configurações da API Cloudinary
-        const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/drsyomd2a/auto/upload";
-        // Sua API Key. Note que, com o Upload Preset, ela é usada apenas para identificar a conta, mas o PRESET é a chave principal.
-        const CLOUDINARY_API_KEY = "596618796528727"; 
+        // API Key do Pixeldrain
+        const PIXELDRAIN_API_KEY = "0b484f79-ae31-4f48-9078-c17ae5babdb5"; 
         
-        // 🚨 VOCÊ DEVE MUDAR ISTO: Crie um Upload Preset NÃO ASSINADO no seu painel.
-        const CLOUDINARY_UPLOAD_PRESET = "testes"; 
+        // URL original do Pixeldrain
+        const TARGET_URL = "https://pixeldrain.com/api/file";
+        
+        // Proxy CORS para contornar o bloqueio "Failed to fetch" do navegador
+        // Estamos usando o corsproxy.io que repassa a requisição
+        const PROXY_URL = "https://corsproxy.io/?";
 
         const inputArquivo = document.getElementById('arquivo');
         const btnUpload = document.getElementById('btn-upload');
@@ -88,41 +96,45 @@
             }
 
             btnUpload.disabled = true;
-            statusSpan.textContent = "Iniciando upload...";
+            statusSpan.textContent = "Conectando ao Proxy e enviando...";
             linkContainer.style.display = 'none';
             resultadoDiv.style.display = 'block';
 
-            // Cria um objeto FormData para a requisição POST
-            const formData = new FormData();
-            formData.append('file', arquivo); // O arquivo
-            formData.append('api_key', CLOUDINARY_API_KEY); // Sua API Key
-            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); // O Upload Preset
-
             try {
-                statusSpan.textContent = "Enviando arquivo...";
+                const formData = new FormData();
+                formData.append('file', arquivo);
                 
-                const resposta = await fetch(CLOUDINARY_UPLOAD_URL, {
+                // Montamos a URL final: Proxy + URL codificada do Pixeldrain
+                const urlFinal = PROXY_URL + encodeURIComponent(TARGET_URL);
+
+                const resposta = await fetch(urlFinal, {
                     method: 'POST',
+                    headers: {
+                        // O Proxy repassa este header para o Pixeldrain
+                        "Authorization": "Basic " + btoa(":" + PIXELDRAIN_API_KEY)
+                    },
                     body: formData
                 });
 
-                if (!resposta.ok) {
-                    const erroData = await resposta.json();
-                    throw new Error(`Erro de resposta da API: ${resposta.status} - ${erroData.error ? erroData.error.message : 'Erro desconhecido'}`);
+                if (resposta.status >= 400) {
+                    const erroTexto = await resposta.text(); // Usamos text() pois proxies as vezes retornam HTML de erro
+                    throw new Error(`Erro na API (${resposta.status}): ${erroTexto.substring(0, 100)}...`);
                 }
 
                 const data = await resposta.json();
-                
-                // O link de visualização (URL segura) é retornado na resposta
-                const urlVisualizacao = data.secure_url; 
 
-                statusSpan.textContent = "Upload concluído com sucesso!";
-                linkGeradoSpan.textContent = urlVisualizacao;
-                linkContainer.style.display = 'block';
+                if (data.success) {
+                    const urlVisualizacao = `https://pixeldrain.com/u/${data.id}`;
+                    statusSpan.textContent = "Upload realizado com sucesso!";
+                    linkGeradoSpan.textContent = urlVisualizacao;
+                    linkContainer.style.display = 'block';
+                } else {
+                    throw new Error("A API retornou sucesso: false");
+                }
 
             } catch (erro) {
-                statusSpan.textContent = `Falha no upload: ${erro.message}. Verifique o console para mais detalhes.`;
-                console.error("Erro de Upload:", erro);
+                statusSpan.textContent = `Falha: ${erro.message}`;
+                console.error("Detalhe do Erro:", erro);
                 linkContainer.style.display = 'none';
             } finally {
                 btnUpload.disabled = false;
