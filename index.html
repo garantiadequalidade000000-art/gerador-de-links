@@ -113,6 +113,9 @@
         const progressoContainer = document.getElementById('barra-progresso-container');
         const barraProgresso = document.getElementById('barra-progresso');
 
+        // **NOVA CONSTANTE: Tempo limite da requisição (5 minutos em ms)**
+        const REQUEST_TIMEOUT_MS = 300000;
+
 
         function resetarStatus() {
             statusSpan.textContent = "";
@@ -155,6 +158,13 @@
                 // **Substituição de 'fetch' por 'XMLHttpRequest' para rastrear o progresso**
                 const xhr = new XMLHttpRequest();
 
+                // **ATUALIZAÇÃO DE CÓDIGO AQUI**
+                // Define o tempo limite da requisição no lado do cliente (navegador).
+                // Isso não afeta o timeout do servidor 504, mas evita que a requisição 
+                // fique 'pendurada' infinitamente no navegador.
+                xhr.timeout = REQUEST_TIMEOUT_MS;
+
+
                 // Evento de progresso do upload
                 xhr.upload.addEventListener('progress', (e) => {
                     if (e.lengthComputable) {
@@ -163,6 +173,13 @@
                         atualizarProgresso(percentComplete);
                     }
                 });
+
+                // **NOVO EVENTO: Trata o timeout definido acima (no cliente)**
+                xhr.ontimeout = () => {
+                    statusSpan.textContent = `A requisição excedeu o tempo limite do navegador (${REQUEST_TIMEOUT_MS / 1000} segundos). O Proxy pode estar lento. Tente novamente ou use um Proxy diferente.`;
+                    linkContainer.style.display = 'none';
+                    btnUpload.disabled = false;
+                };
 
                 // Evento de conclusão/erro
                 xhr.addEventListener('load', () => {
